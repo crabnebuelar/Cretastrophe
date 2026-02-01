@@ -1,3 +1,7 @@
+// ============================================================================
+// RayCastController.cs
+// Dictates the raycasting used for player collisions
+// ============================================================================
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -16,7 +20,6 @@ public class RayCastController : MonoBehaviour
     [HideInInspector]
     public float verticalRaySpacing;
 
-    
     public new BoxCollider2D collider;
     public RaycastOrigins raycastOrigins;
 
