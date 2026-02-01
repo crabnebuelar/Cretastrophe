@@ -1,0 +1,78 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!78 &1
+TagManager:
+  serializedVersion: 2
+  tags:
+  - Red
+  - White
+  - NoDraw
+  - Eraser
+  - BallDespawn
+  - PhysicsObj
+  - BlueLine
+  - Ground
+  - Lava
+  - FxTemporaire
+  - Hazards
+  layers:
+  - Default
+  - TransparentFX
+  - Ignore Raycast
+  - 
+  - Water
+  - UI
+  - 
+  - Chalk
+  - Player
+  - Obstacle
+  - SpikeBallSpawner
+  - NoDraw
+  - Camera
+  - Enemy
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  m_SortingLayers:
+  - name: Background
+    uniqueID: 2056858247
+    locked: 0
+  - name: Default
+    uniqueID: 0
+    locked: 0
+  - name: Chalk
+    uniqueID: 2569568791
+    locked: 0
+  - name: NoDrawZone
+    uniqueID: 493451525
+    locked: 0
+  - name: Projectile
+    uniqueID: 889724969
+    locked: 0
+  - name: Hazards
+    uniqueID: 2862756683
+    locked: 0
+  - name: Ground
+    uniqueID: 1024043353
+    locked: 0
+  - name: Effects
+    uniqueID: 2477529771
+    locked: 0
+  - name: Eraser
+    uniqueID: 532178899
+    locked: 0
