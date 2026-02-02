@@ -1,10 +1,14 @@
+// ===============================================================================
+// CameraLook.cs
+// Shifts the camera depending on the direction the player is moving,
+// in order to add visibility for future obstacles.
+// ===============================================================================
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class CameraTest : MonoBehaviour
+public class CameraLook : MonoBehaviour
 {
-
     public Controller2D target;
     public float verticalOffset;
     public float lookAheadDstX;
@@ -55,7 +59,6 @@ public class CameraTest : MonoBehaviour
                 }
             }
         }
-
 
         currentLookAheadX = Mathf.SmoothDamp(currentLookAheadX, targetLookAheadX, ref smoothLookVelocityX, lookSmoothTimeX);
 

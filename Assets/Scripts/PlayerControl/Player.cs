@@ -1,260 +1,273 @@
+// ===============================================================================
+// Player.cs
+// Reads player input to dictate movement to the controller
+// Uses coyote time and jump buffering to account for variable player-drawn slopes
+// ===============================================================================
 using System.Collections;
-using System.Collections.Generic;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.Events;
 
 [RequireComponent(typeof(Controller2D))]
 public class Player : MonoBehaviour
 {
+    [Header("Movement")]
+    [SerializeField] float moveSpeed = 6f;
+    [SerializeField] float moveSpeedIce = 10f;
+    [SerializeField] float accelerationTimeGrounded = .05f;
+    [SerializeField] float accelerationTimeAirborne = .15f;
+    [SerializeField] float accelerationTimeIcy = .3f;
+
+    [Header("Jump")]
+    [SerializeField] float baseVelocity = 6f;
+    [SerializeField] float holdAcceleration = 25f;
+    [SerializeField] float holdAccelerationFalloff = 35f;
+    [SerializeField] float holdDuration = .30f;
+    [SerializeField] float coyoteDuration = .1f;
+
+    [Header("Gravity")]
+    [SerializeField] float gravity = -25f;
+    [SerializeField] float maxVelocityY = 15f;
+    [SerializeField] float fallMultiplier = 1.15f;
+
+    [Header("Audio")]
+    public AudioClip jumpSound;
+    public AudioClip deathSound;
+    public AudioClip respawnSound;
+
+    [Header("Respawn")]
     public UnityEvent respawnObjects;
-    
-    public float gravity = -25;
-    float maxVelocityY = 15;
-    float fallMultiplier = 1.15f;
 
-    float accelerationTimeAirborne = .15f;
-    float accelerationTimeGrounded = .05f;
-    float accelerationTimeIcy = .3f;
-    float moveSpeed = 6;
-    float moveSpeedIce = 10;
+    Controller2D controller;
+    SpriteRenderer spriteRenderer;
+    Collider2D playerCollider;
 
-    float baseVelocity = 6;
-    float holdAcceleration = 25;
-    float holdAccelerationFalloff = 35;
-    float holdDuration = 0.30f;
-    float jumpTimeElapsed;
-    float curHoldAcceleration;
-
-    float coyoteTimePre;
-    float coyoteTimePost;
-    float coyoteDuration = .1f;
-
-    bool coyoteCheckPre = false;
-    bool coyoteCheckPost = false;
-    bool jumping = false;
-
-    //float jumpVelocity;
     Vector2 velocity;
     float velocityXSmoothing;
 
-    Controller2D controller;
+    // Jump state
+    bool jumping;
+    float jumpTimeElapsed;
+    float curHoldAcceleration;
 
-    //Respawn stuff
+    // Coyote time and jump buffering
+    float coyoteTime;
+    bool coyoteCheck;
+    float jumpBufferTime;
+    bool jumpBuffer;
+
+    // Respawn
     Vector2 startPos;
-    SpriteRenderer spriteRenderer;
-    Collider2D playerCollider;
-    public AudioClip deathSound; //Sound effect
-    public AudioClip respawnSound; //Sound effect
-    private bool isDead = false;
+    bool isDead;
 
-    //Jump sound here
-    public AudioClip jumpSound; //Sound effect
-
-    private void Awake()
+    void Awake()
     {
+        controller = GetComponent<Controller2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
-        playerCollider = GetComponent<Collider2D>(); 
+        playerCollider = GetComponent<Collider2D>();
     }
 
     void Start()
     {
-        controller = GetComponent<Controller2D>();
-
-        //gravity = -(2 * jumpHeight) / Mathf.Pow(timeToJumpApex, 2);
-        //jumpVelocity = Mathf.Abs(gravity) * timeToJumpApex;
-        jumpTimeElapsed = 0;
         startPos = transform.position;
-        
     }
 
     void Update()
     {
-        
-        if ((controller.collisions.above && velocity.y > 0) || (controller.collisions.below && velocity.y < 0) && !jumping) 
-        {
-            if (!controller.collisions.slidingDownMaxSlope)
-            {
-                velocity.y = 0;
-            }
-        }
-        
-        Vector2 input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-        if(input.x < 0)
-        {
-            spriteRenderer.flipX = true;
-        }
-        else if(input.x > 0)
-        {
-            spriteRenderer.flipX = false;
-        }
+        HandleVerticalCollisionCancel();
+        Vector2 input = ReadInput();
+        HandleSpriteFlip(input.x);
 
-        
-        if(controller.collisions.below && !coyoteCheckPost && !jumping)
+        HandleCoyoteTime();
+        HandleJumpInput();
+        HandleJumpHold();
+        HandleHorizontalMovement(input.x);
+        ApplyGravity();
+
+        controller.Move(velocity * Time.deltaTime, input);
+    }
+
+    #region Input
+
+    Vector2 ReadInput()
+    {
+        return new Vector2(
+            Input.GetAxisRaw("Horizontal"),
+            Input.GetAxisRaw("Vertical")
+        );
+    }
+
+    void HandleSpriteFlip(float xInput)
+    {
+        if (xInput != 0)
+            spriteRenderer.flipX = xInput < 0;
+    }
+
+    #endregion
+
+    #region Jump Logic
+
+    void StartJump()
+    {
+        AudioSource.PlayClipAtPoint(jumpSound, transform.position);
+        velocity.y = baseVelocity;
+        jumpTimeElapsed = 0f;
+        jumping = true;
+        curHoldAcceleration = holdAcceleration;
+    }
+
+    void HandleJumpInput()
+    {
+        if (!Input.GetKeyDown(KeyCode.Space)) return;
+
+        if (controller.collisions.below || coyoteCheck)
         {
-            coyoteTimePre = 0;
-            coyoteCheckPre = true;
+            StartJump();
+            coyoteCheck = false;
+            jumpBuffer = false;
         }
         else
         {
-            if (coyoteCheckPre)
-            {
-                if (coyoteTimePre < coyoteDuration)
-                {
-                    coyoteTimePre += Time.deltaTime;
-                }
-                else
-                {
-                    coyoteCheckPre = false;
-                }
-            }
-
+            jumpBufferTime = 0;
+            jumpBuffer = true;
         }
-        
-        if (Input.GetKeyDown(KeyCode.Space))
+    }
+
+    void HandleJumpHold()
+    {
+        if (!Input.GetKey(KeyCode.Space))
         {
-            
-            if (!coyoteCheckPre)
-            {
-                if (controller.collisions.below)
-                {
-                    AudioSource.PlayClipAtPoint(jumpSound, transform.position); //jumpfx
-                    velocity.y = baseVelocity;
-                    jumpTimeElapsed = 0;
-                    jumping = true;
-                    curHoldAcceleration = holdAcceleration;
-                    coyoteCheckPost = false;
-                }
-                else
-                {
-                    coyoteTimePost = 0;
-                    coyoteCheckPost = true;
-                }
-            }
-            else
-            {
-            
-                AudioSource.PlayClipAtPoint(jumpSound, transform.position); //jumpfx
-                velocity.y = baseVelocity;
-                jumpTimeElapsed = 0;
-                jumping = true;
-                curHoldAcceleration = holdAcceleration;
-                coyoteCheckPre = false;
-            
-            }
+            jumping = false;
+            return;
         }
 
-        if(Input.GetKey(KeyCode.Space))
+        if (jumping && jumpTimeElapsed < holdDuration)
         {
-            
-            if (jumpTimeElapsed < holdDuration && jumping)
-            {
-                velocity.y += curHoldAcceleration * Time.deltaTime;
-                curHoldAcceleration -= holdAccelerationFalloff * Time.deltaTime;
-                jumpTimeElapsed += Time.deltaTime;
-            }
-            else if(coyoteCheckPost)
-            {
-                if (coyoteTimePost < coyoteDuration)
-                {
-                    if (controller.collisions.below)
-                    {
-                        velocity.y = baseVelocity;
-                        jumpTimeElapsed = 0;
-                        jumping = true;
-                        curHoldAcceleration = holdAcceleration;
-                        coyoteCheckPost = false;
-                    }
-                    else
-                    {
-                        coyoteTimePost += Time.deltaTime;
-                    }
-                }
-                else
-                {
-                    coyoteCheckPost = false;
-                }
-            }
-            else if(jumpTimeElapsed > holdDuration && jumping)
-            {
-                jumping = false;
-            }
+            velocity.y += curHoldAcceleration * Time.deltaTime;
+            curHoldAcceleration -= holdAccelerationFalloff * Time.deltaTime;
+            jumpTimeElapsed += Time.deltaTime;
         }
-
-        if(Input.GetKeyUp(KeyCode.Space))
+        else
         {
             jumping = false;
         }
 
-        float targetVelocityX = input.x * ((controller.collisions.onIce) ? moveSpeedIce : moveSpeed);
-        float smoothTime;
-        if (controller.collisions.below)
+        HandlePostCoyoteJump();
+    }
+
+    void HandlePostCoyoteJump()
+    {
+        if (!jumpBuffer) return;
+
+        if (jumpBufferTime < coyoteDuration)
         {
-            smoothTime = (controller.collisions.onIce) ? accelerationTimeIcy : accelerationTimeGrounded;
+            if (controller.collisions.below)
+            {
+                StartJump();
+                jumpBuffer = false;
+            }
+            else
+            {
+                jumpBufferTime += Time.deltaTime;
+            }
         }
         else
         {
-            smoothTime = accelerationTimeAirborne;
+            jumpBuffer = false;
         }
-        velocity.x = Mathf.SmoothDamp(velocity.x, targetVelocityX, ref velocityXSmoothing, smoothTime);
+    }
+
+    void HandleCoyoteTime()
+    {
+        if (controller.collisions.below && !jumping)
+        {
+            coyoteTime = 0;
+            coyoteCheck = true;
+            return;
+        }
+
+        if (coyoteCheck)
+        {
+            coyoteTime += Time.deltaTime;
+            if (coyoteTime > coyoteDuration)
+                coyoteCheck = false;
+        }
+    }
+
+    #endregion
+
+    #region Movement & Gravity
+
+    void HandleHorizontalMovement(float xInput)
+    {
+        float targetSpeed =
+            xInput * (controller.collisions.onIce ? moveSpeedIce : moveSpeed);
+
+        float smoothTime =
+            controller.collisions.below
+                ? (controller.collisions.onIce ? accelerationTimeIcy : accelerationTimeGrounded)
+                : accelerationTimeAirborne;
+
+        velocity.x = Mathf.SmoothDamp(
+            velocity.x,
+            targetSpeed,
+            ref velocityXSmoothing,
+            smoothTime
+        );
+
         if ((controller.collisions.left || controller.collisions.right) && !jumping)
-        {
             velocity.x = 0;
-        }
-        if (velocity.y <= 0)
-        {
-            velocity.y += gravity * fallMultiplier * Time.deltaTime;
-        }
-        else if(velocity.y > 0)
-        {
-            velocity.y += gravity * Time.deltaTime;
-        }
-        //velocity.y += gravity * Time.deltaTime;
+    }
+
+    void ApplyGravity()
+    {
+        float multiplier = velocity.y <= 0 ? fallMultiplier : 1f;
+        velocity.y += gravity * multiplier * Time.deltaTime;
         velocity.y = Mathf.Clamp(velocity.y, -maxVelocityY, maxVelocityY);
-        controller.Move(velocity * Time.deltaTime, input);
-        //Physics.SyncTransforms();
     }
 
-    // Helper functions for Projectile.cs
-    public Vector2 getPlayerVelocity()
+    void HandleVerticalCollisionCancel()
     {
-        return velocity;
+        if ((controller.collisions.above && velocity.y > 0) ||
+            (controller.collisions.below && velocity.y < 0 && !jumping))
+        {
+            if (!controller.collisions.slidingDownMaxSlope)
+                velocity.y = 0;
+        }
     }
 
-    // Helper functions for Projectile.cs
-    public void updatePlayerVelocity(Vector2 velocity)
-    {
-        this.velocity = velocity;
-    }
+    #endregion
 
-    public void updateCheckpoint(Vector2 pos)
-    {
-        startPos = pos;
-    }
+    #region Respawn
 
     public void Die()
     {
         if (isDead) return;
+
         isDead = true;
         AudioSource.PlayClipAtPoint(deathSound, transform.position);
         playerCollider.enabled = false;
-        StartCoroutine(Respawn(1.0f));
+        StartCoroutine(Respawn(1f));
     }
 
-    IEnumerator Respawn(float duration)
+    IEnumerator Respawn(float delay)
     {
-       
         spriteRenderer.enabled = false;
-        //playerCollider.enabled = false;
-        yield return new WaitForSeconds(duration);
+        yield return new WaitForSeconds(delay);
+
         AudioSource.PlayClipAtPoint(respawnSound, transform.position);
         transform.position = startPos;
+
         spriteRenderer.enabled = true;
         playerCollider.enabled = true;
-        spriteRenderer.enabled = true;
         isDead = false;
+
         respawnObjects.Invoke();
-        
     }
 
+    public void UpdateCheckpoint(Vector2 pos)
+    {
+        startPos = pos;
+    }
+
+    #endregion
 }

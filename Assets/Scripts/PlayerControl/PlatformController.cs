@@ -1,3 +1,7 @@
+// ===============================================================================
+// PlatformController.cs
+// Dictates player movement on a moving platform
+// ===============================================================================
 using System.Collections;
 using System.Collections.Generic;
 using Pathfinding;

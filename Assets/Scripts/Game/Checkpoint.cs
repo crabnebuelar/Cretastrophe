@@ -32,7 +32,7 @@ public class Checkpoint : MonoBehaviour
         if(other.gameObject.CompareTag("Player"))
         {
             AudioSource.PlayClipAtPoint(checkpointSound, transform.position);
-            playerScript.updateCheckpoint(transform.position);
+            playerScript.UpdateCheckpoint(transform.position);
             animation.SetActive(true);
             flagDisactivatedSprite.SetActive(false);
             flagActivatedSprite.SetActive(true);
