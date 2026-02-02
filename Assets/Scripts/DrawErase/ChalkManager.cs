@@ -1,3 +1,7 @@
+// ===============================================================================
+// ChalkManager.cs
+// Manages chalk levels for a given chalk color
+// ===============================================================================
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -14,12 +18,8 @@ public class ChalkManager : MonoBehaviour
     {
         chalkAmount = maxChalk;
         StartCoroutine(HealingLoop());
+    }
 
-    }
-    void Update()
-    {
-        
-    }
     public void ReduceChalk(float reduce)
     {
         chalkAmount -= reduce;

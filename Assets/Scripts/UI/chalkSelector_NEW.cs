@@ -66,6 +66,6 @@ public class chalkSelector_NEW : MonoBehaviour
         if (chalkIndex < 0 || chalkIndex >= chalkUIs.Length) return;
 
         selectedChalkIndex = chalkIndex;
-        drawManager.changeColor(selectedChalkIndex); // Notify draw manager of the change
+        drawManager.ChangeColor(selectedChalkIndex); // Notify draw manager of the change
     }
 }

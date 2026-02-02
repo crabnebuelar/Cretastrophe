@@ -1,3 +1,7 @@
+// ===============================================================================
+// EraseController.cs
+// Controls an eraser that follows the mouse position
+// ===============================================================================
 using System.Collections;
 using System.Collections.Generic;
 using Pathfinding;
@@ -25,6 +29,8 @@ public class EraseController : MonoBehaviour
             nextPos = Vector2.MoveTowards(nextPos, mousePos, Time.deltaTime);
             transform.position = nextPos;
         }
+
+        // Update pathfinding if available
         var guo = new GraphUpdateObject(GetComponent<Collider2D>().bounds);
         guo.updatePhysics = true;
         if (AstarPath.active != null) { AstarPath.active.UpdateGraphs(guo); }

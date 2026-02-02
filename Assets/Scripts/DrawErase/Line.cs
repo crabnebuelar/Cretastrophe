@@ -1,3 +1,7 @@
+// ===============================================================================
+// Line.cs
+// Operations on a single line segment
+// ===============================================================================
 using System.Collections;
 using System.Collections.Generic;
 using Pathfinding;
@@ -6,23 +10,24 @@ using UnityEngine;
 
 public class Line : MonoBehaviour
 {
-    
-    
+    [Header("Rendering / Collision")]
     [SerializeField] public LineRenderer _renderer;
     [SerializeField] private PolygonCollider2D _collider;
-    public ChalkManager _chalkManager = null;
+
+    [Header("References")]
+    public ChalkManager _chalkManager;
     public GameObject dynamicLineParent;
-    private bool isErased = false;
+
+    [Header("State")]
     public bool touchedLava = false;
-    public float heatLevel = 0;
     public bool inLava = false;
     public bool bluePrevCheck = true;
 
-    private readonly List<Vector2> _points = new List<Vector2>();
-    void Start()
-    {
-        //transform.position -= transform.position;
-    }
+    private bool isErased = false;
+    private float heatLevel = 0f;
+
+    // Local-space points used to build the line
+    private readonly List<Vector2> _points = new();
 
     private void Update()
     {
@@ -32,214 +37,112 @@ public class Line : MonoBehaviour
         }
     }
 
-    public bool SetPosition(Vector2 _pos)
+    // Adds a new point to the line in world space.
+    // Returns false if the point is too close to the previous one.
+    public bool SetPosition(Vector2 worldPos)
     {
-        Vector2 pos = Vector2.zero;
-        pos.x = _pos.x - transform.position.x;
-        pos.y = _pos.y - transform.position.y;
+        Vector2 localPos = WorldToLocal(worldPos);
 
-        if (!CanAppend(pos))
-        {
+        if (!CanAppend(localPos))
             return false;
-        }
 
-        
-        _points.Add(pos);
+        _points.Add(localPos);
+
         _renderer.positionCount++;
-        _renderer.SetPosition(_renderer.positionCount - 1, pos);
+        _renderer.SetPosition(_renderer.positionCount - 1, localPos);
 
-        //_collider.points = _points.ToArray();
+        // Not enough points yet to form geometry
+        if (_renderer.positionCount <= 1)
+            return false;
 
-        if(_renderer.positionCount > 1)
-        {
-            //List<Vector2> verts = new List<Vector2>();
-            //verts.Add(_points[0]);
-
-            Mesh mesh = new Mesh();
-            _renderer.BakeMesh(mesh, true);
-            //var boundary = EdgeHelpers.GetEdges(mesh.triangles).FindBoundary().SortEdges();
-            
-            //print(boundary.Count);
-
-            List<Vector2> verts = new List<Vector2>();
-
-            
-            foreach (Vector2 vertex in mesh.vertices)
-            {
-                //verts.Add(mesh.vertices[edge.v1]);
-                
-                if(!verts.Contains(vertex))
-                {  
-                    verts.Add(vertex);
-                }
-                
-            }
-
-            verts = ConvexHull.compute(verts);
-
-            _collider.points = verts.ToArray();
-
-            var guo = new GraphUpdateObject(_collider.bounds);
-            guo.updatePhysics = true;
-            if(AstarPath.active != null) { AstarPath.active.UpdateGraphs(guo); }
-
-            return true;
-
-        }
-        return false;
+        UpdateColliderAndNavMesh();
+        return true;
     }
 
-    //public int GetPositionCount()
-    //{
-    //    return _renderer.positionCount;
-    //}
-
-    public bool CanAppend(Vector2 pos)
-    {
-        if(_renderer.positionCount == 0)
-        {
-            return true;
-        }
-        return Vector2.Distance(_renderer.GetPosition(_renderer.positionCount - 1), pos) - DrawManager.RESOLUTION > float.Epsilon;
-    }
-
-    public bool CanAppendWorldSpace(Vector2 _pos)
+    public bool CanAppend(Vector2 localPos)
     {
         if (_renderer.positionCount == 0)
-        {
             return true;
+
+        Vector2 last = _renderer.GetPosition(_renderer.positionCount - 1);
+        return Vector2.Distance(last, localPos) > DrawManager.RESOLUTION;
+    }
+
+    public bool CanAppendWorldSpace(Vector2 worldPos)
+    {
+        if (_renderer.positionCount == 0)
+            return true;
+
+        return CanAppend(WorldToLocal(worldPos));
+    }
+
+    private Vector2 WorldToLocal(Vector2 worldPos)
+    {
+        return worldPos - (Vector2)transform.position;
+    }
+
+    // Rebuilds the polygon collider from the LineRenderer mesh and updates the A* navigation graph.
+    private void UpdateColliderAndNavMesh()
+    {
+        Mesh mesh = new();
+        _renderer.BakeMesh(mesh, true);
+
+        List<Vector2> verts = new();
+
+        foreach (Vector3 v in mesh.vertices)
+        {
+            Vector2 v2 = v;
+            if (!verts.Contains(v2))
+                verts.Add(v2);
         }
 
-        Vector2 pos = Vector2.zero;
-        pos.x = _pos.x - transform.position.x;
-        pos.y = _pos.y - transform.position.y;
+        verts = ConvexHull.compute(verts);
+        _collider.points = verts.ToArray();
 
-        return Vector2.Distance(_renderer.GetPosition(_renderer.positionCount - 1), pos) - DrawManager.RESOLUTION > float.Epsilon;
+        if (AstarPath.active != null)
+        {
+            var guo = new GraphUpdateObject(_collider.bounds)
+            {
+                updatePhysics = true
+            };
+            AstarPath.active.UpdateGraphs(guo);
+        }
     }
+
 
     public void destroy()
     {
         Destroy(gameObject);
-        if (gameObject.tag == "BlueLine")
+
+        if (CompareTag("BlueLine"))
         {
-            if (gameObject.transform.parent.childCount == 1)
+            Transform parent = transform.parent;
+            if (parent != null && parent.childCount == 1)
             {
-                Destroy(gameObject.transform.parent.gameObject);
+                Destroy(parent.gameObject);
             }
         }
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        // Destroy the item after its collision triggered
-        if ((collision.gameObject.tag == "Eraser" || collision.gameObject.tag == "BallDespawn") && !isErased)
+        if (isErased)
+            return;
+
+        // Eraser or despawn
+        if (collision.CompareTag("Eraser") || collision.CompareTag("BallDespawn"))
         {
-            if(gameObject.tag == "BlueLine")
-            {
-                Transform _parent = gameObject.transform.parent;
-                Vector3 _velocity = _parent.GetComponent<Rigidbody2D>().velocity;
-                int newChildren = 0, oldChildren = 0;
-                if(_parent.gameObject.GetComponent<Rigidbody2D>().bodyType == RigidbodyType2D.Kinematic)
-                {
-                    GameObject _newParent = Instantiate(dynamicLineParent, gameObject.transform.position, Quaternion.identity, _parent.transform.parent);
-                    List<Transform> children = new List<Transform>();
-                    DrawManager _drawManager = _chalkManager.gameObject.GetComponent<DrawManager>();
-                    _drawManager.updateDynamicParent(_newParent);
-                    newChildren++;
-                    foreach (Transform child in _parent.transform)
-                    {
-                        children.Add(child);
-                    }
-
-                    bool afterCurrent = false;
-                    foreach (Transform child in children)
-                    {
-                        if (afterCurrent)
-                        {
-                            child.parent = _newParent.transform;
-                            newChildren++;
-                        }
-                        else
-                        {
-                            if (child.transform == gameObject.transform)
-                            {
-                                afterCurrent = true;
-                            }
-                            oldChildren++;
-                        }
-                    }
-
-                    if (newChildren == 0)
-                    {
-                        Destroy(_newParent.gameObject);
-                    }
-                    
-                     _parent.gameObject.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Dynamic;
-                    
-                }
-                else if (_parent.childCount == 1)
-                {
-                    Destroy(_parent.gameObject);
-                }
-                else
-                {
-                    GameObject _newParent = Instantiate(dynamicLineParent, gameObject.transform.position, Quaternion.identity, _parent.transform.parent);
-                    List<Transform> children = new List<Transform>();
-                    foreach(Transform child in _parent.transform)
-                    {
-                        children.Add(child);
-                    }
-
-                    bool afterCurrent = false;
-                    foreach (Transform child in children)
-                    {
-                        if (afterCurrent)
-                        {
-                            child.parent = _newParent.transform;
-                            newChildren++;
-                        }
-                        else
-                        {
-                            if (child.transform == gameObject.transform)
-                            {
-                                afterCurrent = true;
-                            }
-                            oldChildren++;
-                        }
-                    }
-
-                    if (newChildren == 0)
-                    {
-                        Destroy(_newParent.gameObject);
-                    }
-                    else
-                    {
-                        _newParent.gameObject.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Dynamic;
-                        _newParent.gameObject.GetComponent<Rigidbody2D>().velocity = _velocity;
-                    }
-
-                }
-
-                _parent = gameObject.transform.parent;
-                if (oldChildren == 1)
-                {
-                    Destroy(_parent.gameObject);
-                }
-            }
-            _chalkManager.ReplenishChalk(.1f);
-            gameObject.transform.parent = null;
-            Destroy(gameObject);
-            isErased = true;
+            HandleErase();
+            return;
         }
-        else if (collision.CompareTag("Lava") && !touchedLava)
+
+        // Lava contact
+        if (collision.CompareTag("Lava") && !touchedLava)
         {
             inLava = true;
             HeatUp();
         }
     }
-
-    
-
 
     private void OnTriggerExit2D(Collider2D collision)
     {
@@ -250,180 +153,148 @@ public class Line : MonoBehaviour
         }
     }
 
-    /*private void OnCollisionStay2D(Collision2D collision)
+    private void HandleErase()
     {
-        if (inLava && collision.collider.CompareTag("BlueLine") && (gameObject.CompareTag("White") || gameObject.CompareTag("Red")))
+        if (CompareTag("BlueLine"))
         {
-            _chalkManager.ReplenishChalk(.1f);
-            Destroy(gameObject);
-        }
-    }*/
-
-    private void HeatUp()
-    {
-        if (heatLevel >= 0.5f)
-        {
-            if (gameObject.CompareTag("White"))
-            {
-                DrawManager _drawManager = _chalkManager.gameObject.GetComponent<DrawManager>();
-                _drawManager.createLine(1, gameObject.GetComponent<Line>());
-                _chalkManager.ReplenishChalk(.1f);
-                Destroy(gameObject);
-            }
-            else if (gameObject.CompareTag("BlueLine"))
-            {
-                DrawManager _drawManager = _chalkManager.gameObject.GetComponent<DrawManager>();
-                Transform _parent = gameObject.transform.parent;
-                if (_parent != null && _parent.gameObject.GetComponent<Rigidbody2D>().bodyType == RigidbodyType2D.Dynamic)
-                {
-                    List<Transform> children = new List<Transform>();
-                    bool allInLava = true;
-                    foreach (Transform child in _parent.transform)
-                    {
-                        children.Add(child);
-                        if (!child.gameObject.GetComponent<Line>().inLava)
-                        {
-                            allInLava = false;
-                        }
-                    }
-                    if (allInLava)
-                    {
-                        foreach (Transform child in children)
-                        {
-                            _drawManager.createLine(2, child.gameObject.GetComponent<Line>());
-                            child.gameObject.GetComponent<Line>().EraseDynamic();
-                        }
-                    }
-                    else
-                    {
-                        foreach (Transform child in children)
-                        {
-                            _drawManager.createLine(2, child.gameObject.GetComponent<Line>());
-                            child.gameObject.GetComponent<Line>().EraseDynamic();
-                        }
-                    }
-                }
-                else
-                {
-                    _drawManager.createLine(2, gameObject.GetComponent<Line>());
-                    EraseDynamic();
-                }
-            }
-        }
-        else
-        {
-            Rigidbody2D _rb = null;
-            if (gameObject.CompareTag("BlueLine") && gameObject.transform.parent != null)
-            {
-                _rb = gameObject.transform.parent.GetComponent<Rigidbody2D>();
-            }
-            
-            if(gameObject.CompareTag("BlueLine") && _rb != null && (_rb.bodyType == RigidbodyType2D.Dynamic))
-            {
-                heatLevel += Time.deltaTime * 1.5f;
-            }
-            else
-            {
-                heatLevel += Time.deltaTime;
-            }
-        }
-    }
-
-    private void EraseDynamic()
-    {
-        Transform _parent = gameObject.transform.parent;
-        Vector3 _velocity = _parent.GetComponent<Rigidbody2D>().velocity;
-        int newChildren = 0, oldChildren = 0;
-        if (_parent.gameObject.GetComponent<Rigidbody2D>().bodyType == RigidbodyType2D.Kinematic)
-        {
-            GameObject _newParent = Instantiate(dynamicLineParent, gameObject.transform.position, Quaternion.identity, _parent.transform.parent);
-            List<Transform> children = new List<Transform>();
-            DrawManager _drawManager = _chalkManager.gameObject.GetComponent<DrawManager>();
-            _drawManager.updateDynamicParent(_newParent);
-            newChildren++;
-            foreach (Transform child in _parent.transform)
-            {
-                children.Add(child);
-            }
-
-            bool afterCurrent = false;
-            foreach (Transform child in children)
-            {
-                if (afterCurrent)
-                {
-                    child.parent = _newParent.transform;
-                    newChildren++;
-                }
-                else
-                {
-                    if (child.transform == gameObject.transform)
-                    {
-                        afterCurrent = true;
-                    }
-                    oldChildren++;
-                }
-            }
-
-            if (newChildren == 0)
-            {
-                Destroy(_newParent.gameObject);
-            }
-
-            _parent.gameObject.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Dynamic;
-        }
-        else if (_parent.childCount == 1)
-        {
-            Destroy(_parent.gameObject);
-        }
-        else
-        {
-            GameObject _newParent = Instantiate(dynamicLineParent, gameObject.transform.position, Quaternion.identity, _parent.transform.parent);
-            List<Transform> children = new List<Transform>();
-            foreach (Transform child in _parent.transform)
-            {
-                children.Add(child);
-            }
-
-            bool afterCurrent = false;
-            foreach (Transform child in children)
-            {
-                if (afterCurrent)
-                {
-                    child.parent = _newParent.transform;
-                    newChildren++;
-                }
-                else
-                {
-                    if (child.transform == gameObject.transform)
-                    {
-                        afterCurrent = true;
-                    }
-                    oldChildren++;
-                }
-            }
-
-            if (newChildren == 0)
-            {
-                Destroy(_newParent.gameObject);
-            }
-            else
-            {
-                _newParent.gameObject.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Dynamic;
-                _newParent.gameObject.GetComponent<Rigidbody2D>().velocity = _velocity;
-            }
-
+            SplitFromParent(applyVelocity: true);
         }
 
-        _parent = gameObject.transform.parent;
-        if (oldChildren == 1)
-        {
-            Destroy(_parent.gameObject);
-        }
-    
-        _chalkManager.ReplenishChalk(.1f);
-        gameObject.transform.parent = null;
+        _chalkManager.ReplenishChalk(0.1f);
+        transform.parent = null;
         Destroy(gameObject);
         isErased = true;
     }
 
+    // Adds "heat" to the line until it can change color
+    private void HeatUp()
+    {
+        if (heatLevel < 0.5f)
+        {
+            IncreaseHeat();
+            return;
+        }
+
+        DrawManager drawManager = _chalkManager.GetComponent<DrawManager>();
+
+        // White lines convert immediately
+        if (CompareTag("White"))
+        {
+            drawManager.createLine(1, this);
+            _chalkManager.ReplenishChalk(0.1f);
+            Destroy(gameObject);
+            return;
+        }
+
+        // Blue lines melt together
+        if (CompareTag("BlueLine"))
+        {
+            Transform parent = transform.parent;
+
+            if (parent != null && parent.TryGetComponent(out Rigidbody2D rb) &&
+                rb.bodyType == RigidbodyType2D.Dynamic)
+            {
+                // Melt entire dynamic chain
+                List<Transform> children = new();
+                foreach (Transform child in parent)
+                    children.Add(child);
+
+                foreach (Transform child in children)
+                {
+                    drawManager.createLine(2, child.GetComponent<Line>());
+                    child.GetComponent<Line>().EraseDynamic();
+                }
+            }
+            else
+            {
+                drawManager.createLine(2, this);
+                EraseDynamic();
+            }
+        }
+    }
+
+    private void IncreaseHeat()
+    {
+        Rigidbody2D rb = null;
+
+        if (CompareTag("BlueLine") && transform.parent != null)
+            rb = transform.parent.GetComponent<Rigidbody2D>();
+
+        // Dynamic blue lines heat up faster
+        heatLevel += Time.deltaTime * ((rb != null && rb.bodyType == RigidbodyType2D.Dynamic) ? 1.5f : 1f);
+    }
+
+    private void EraseDynamic()
+    {
+        SplitFromParent(applyVelocity: true);
+
+        _chalkManager.ReplenishChalk(0.1f);
+        transform.parent = null;
+        Destroy(gameObject);
+        isErased = true;
+    }
+
+    // Blue lines can be split if erased down the middle
+    private void SplitFromParent(bool applyVelocity)
+    {
+        Transform parent = transform.parent;
+        if (parent == null)
+            return;
+
+        Rigidbody2D parentRb = parent.GetComponent<Rigidbody2D>();
+        Vector2 velocity = parentRb.velocity;
+
+        int oldChildren = 0;
+        int newChildren = 0;
+
+        GameObject newParent = Instantiate(
+            dynamicLineParent,
+            transform.position,
+            Quaternion.identity,
+            parent.parent
+        );
+
+        DrawManager drawManager = _chalkManager.GetComponent<DrawManager>();
+        drawManager.UpdateDynamicParent(newParent);
+
+        bool afterCurrent = false;
+        List<Transform> children = new();
+
+        foreach (Transform child in parent)
+            children.Add(child);
+
+        foreach (Transform child in children)
+        {
+            if (afterCurrent)
+            {
+                child.parent = newParent.transform;
+                newChildren++;
+            }
+            else
+            {
+                if (child == transform)
+                    afterCurrent = true;
+
+                oldChildren++;
+            }
+        }
+
+        if (newChildren == 0)
+        {
+            Destroy(newParent);
+        }
+        else
+        {
+            Rigidbody2D rb = newParent.GetComponent<Rigidbody2D>();
+            rb.bodyType = RigidbodyType2D.Dynamic;
+
+            if (applyVelocity)
+                rb.velocity = velocity;
+        }
+
+        if (oldChildren == 1)
+            Destroy(parent.gameObject);
+        else
+            parentRb.bodyType = RigidbodyType2D.Dynamic;
+    }
 }
