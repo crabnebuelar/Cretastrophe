@@ -1,6 +1,6 @@
 # Cretastrophe
 
-**Cretastrophe** is a 2D puzzle-platformer centered around drawing and erasing chalk platforms to navigate levels and solve physics-based puzzles.
+**Cretastrophe** is a Unity-based 2D puzzle-platformer centered around drawing and erasing chalk platforms to navigate levels and solve physics-based puzzles.
 
 Players can dynamically create and erase platforms in real time, requiring the game systems to handle constantly changing collision geometry, unstable surfaces, and physics interactions driven by player input.
 
@@ -14,7 +14,7 @@ I was responsible for the core gameplay systems, including:
 - Line-drawing and erasing mechanic for chalk platforms
 - Physics-driven puzzle mechanics built on dynamic, player-created geometry
 
-My work focused on making the game feel responsive and stable despite the environment changing every frame.
+My work focused on ensuring stability despite a rapidly changing game environment.
 
 ---
 
@@ -24,8 +24,7 @@ My work focused on making the game feel responsive and stable despite the enviro
 
 - Implemented a custom 2D platformer controller
 - Adapted movement and grounding logic to support:
-  - Rapidly changing slopes
-  - Non-uniform, player-drawn platforms (not straight lines)
+  - Rapidly changing slopes (players don't draw straight lines)
 - Ensured stable movement when platforms are:
   - Added or removed under the player
   - Modified while the player is standing on them
@@ -77,14 +76,6 @@ This system required careful handling of geometry splitting and physics reassign
 - Handling player movement on **constantly changing collision geometry**
 - Maintaining stable physics behavior when geometry is created, destroyed, or split at runtime
 - Designing systems flexible enough to support multiple chalk behaviors without hard-coding logic
-
----
-
-## Technologies Used
-
-- 2D physics engine
-- Custom gameplay and physics systems
-- C# (Unity)
 
 ---
 
