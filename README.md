@@ -23,6 +23,7 @@ My work focused on ensuring stability despite a rapidly changing game environmen
 ### Player Controller
 
 - Implemented a custom 2D platformer controller
+  - Utilized advanced raycasting for collision detection across the bounds of the player character
 - Adapted movement and grounding logic to support:
   - Rapidly changing slopes (players don't draw straight lines)
 - Ensured stable movement when platforms are:
