@@ -4,6 +4,10 @@
 
 Players can dynamically create and erase platforms in real time, requiring the game systems to handle constantly changing collision geometry, unstable surfaces, and physics interactions driven by player input.
 
+This was a group-based project in which I served as the Project Lead, where I directed overall system design and outlined puzzle mechanics.
+
+**Award:** Best In Show – Fall 2024 (UCF AI in Game Programming Showcase)
+
 ---
 
 ## My Contributions
